@@ -1,0 +1,1 @@
+java -jar bin/yuicompressor-2.4.8.jar src/pp.js -o dist/pp.min.js  --charset utf-8
