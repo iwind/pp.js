@@ -38,7 +38,8 @@
     };
 
     pp.ActionObject = function (action) {
-        var _action = action;
+		var _action = action;
+		var _url = null;
         var _params = {};
         var _target;
         var _timeout = 10;
@@ -48,6 +49,11 @@
         var _errorFn;
         var _self = this;
         var _method = null;
+
+		this.url = function (url) {
+			_url = url;
+			return this;
+		};
 
         this.param = function (name, value) {
             _params[name] = value;
@@ -101,59 +107,76 @@
             if (typeof(_beforeFn) == "function") {
                 var before = _beforeFn.call(pp, this);
                 if (typeof(before) == "boolean" && !before) {
-                    return;
+                    return this;
                 }
             }
+
+			var url = _url;
+			if (_url == null) {
+				url = pp.url(_action);
+			}
+
             $.ajax({
-                "timeout":Math.ceil(_timeout * 1000),
-                "type":"POST",
-                "data":_params,
-                "url":pp.url(_action),
-                "dataType":"json",
-                "success":function (response) {
+                "timeout": Math.ceil(_timeout * 1000),
+                "type": "POST",
+                "data": _params,
+                "url": url,
+                "dataType": "json",
+                "success": function (response) {
                     if (typeof(_doneFn) == "function") {
                         _doneFn.call(pp, _self, response);
                     }
                 },
-                "error":function () {
+                "error": function () {
                     if (typeof(_errorFn) == "function") {
                         _errorFn.call(pp, _self);
                     }
                 }
             });
+
+			return this;
         };
 
         this.get = function () {
             if (typeof(_beforeFn) == "function") {
                 var before = _beforeFn.call(pp, this);
                 if (typeof(before) == "boolean" && !before) {
-                    return;
+                    return this;
                 }
             }
-            $.ajax({
-                "timeout":Math.ceil(_timeout * 1000),
-                "type":"GET",
-                "data":_params,
-                "url":pp.url(_action),
-                "dataType":"json",
-                "success":function (response) {
-                    if (typeof(_doneFn) == "function") {
+			var url = _url;
+			if (_url == null) {
+				url = pp.url(_action);
+			}
+	        $.ajax({
+                "timeout": Math.ceil(_timeout * 1000),
+                "type": "GET",
+                "data": _params,
+                "url": url,
+                "dataType": "json",
+                "success": function (response) {
+	                if (typeof(_doneFn) == "function") {
                         _doneFn.call(pp, _self, response);
                     }
                 },
-                "error":function () {
+                "error": function (ajax, message) {
                     if (typeof(_errorFn) == "function") {
-                        _errorFn.call(pp, _self);
+                        _errorFn.call(pp, _self, message);
+                    }
+	                else {
+	                    pp.log("'get' error:" + message);
                     }
                 }
             });
+
+			return this;
         };
 
         this.pull = function () {
             if (typeof(_beforeFn) == "function") {
                 var before = _beforeFn.call(pp, this);
                 if (typeof(before) == "boolean" && !before) {
-                    return;
+                    return this;
                 }
             }
 
@@ -161,13 +184,18 @@
                 _method = pp.action.GET;
             }
 
+			var url = _url;
+			if (_url == null) {
+				url = pp.url(_action);
+			}
+
             $.ajax({
-                "timeout":Math.ceil(_timeout * 1000),
-                "type":_method,
-                "data":_params,
-                "url":pp.url(_action),
-                "dataType":"html",
-                "success":function (response) {
+                "timeout": Math.ceil(_timeout * 1000),
+                "type": _method,
+                "data": _params,
+                "url": url,
+                "dataType": "html",
+                "success": function (response) {
                     if (_target) {
                         $(_target).html(response);
 
@@ -177,19 +205,21 @@
                         _doneFn.call(pp, _self, response);
                     }
                 },
-                "error":function () {
+                "error": function () {
                     if (typeof(_errorFn) == "function") {
                         _errorFn.call(pp, _self);
                     }
                 }
             });
+
+			return this;
         };
 
         this.poll = function () {
             if (typeof(_beforeFn) == "function") {
                 var before = _beforeFn.call(pp, this);
                 if (typeof(before) == "boolean" && !before) {
-                    return;
+                    return this;
                 }
             }
 
@@ -227,6 +257,8 @@
                     }, Math.ceil(_duration * 1000));
                 }
             });
+
+			return this;
         };
 
         return this;
@@ -584,27 +616,40 @@
      * @constructor pp.Array
      */
     pp.Array = function () {
+	    if (this instanceof Function) {
+		    var arr = new pp.Array();
+		    arr._init(arguments);
+		    return arr;
+	    }
+
         pp.mixIn(this, pp.Iterator);
 
-        var array = [];
-        if (arguments.length == 0) {
-            array = [];
-        }
-        else if (arguments.length == 1 && typeof(arguments[0]) == "object") {
-            for (var i = 0; i< arguments[0].length; i ++) {
-                array.push(arguments[0][i]);
-            }
-        } else {
-            for (var i = 0; i < arguments.length; i ++) {
-                array.push(arguments[i]);
-            }
-        }
+	    var array = [];
+
+		this._init = function (args) {
+			if (pp.fn.isUndefined(args)) {
+				return;
+			}
+			if (args.length == 0) {
+				array = [];
+			}
+			else if (args.length == 1 && typeof(args[0]) == "object" && pp.fn.isDefined(args[0].length)) {
+				for (var i = 0; i< args[0].length; i ++) {
+					array.push(args[0][i]);
+				}
+			}
+			else {
+				for (var i = 0; i < arguments.length; i ++) {
+					array.push(args[i]);
+				}
+			}
+		};
 
         /**
          * 数组中是否包含某个值
          *
          * @method contains
-         * @param Object value
+         * @param object value
          * @param boolean strict 是否类型严格，为可选参数，默认为false
          * @return boolean
          * @version 0.0.1
@@ -795,7 +840,7 @@
          */
         this.asort = function (sortFunction) {
             var indexes = new pp.Array();
-            for (var i=0; i<array.length; i++) {
+            for (var i = 0; i < array.length; i ++) {
                 indexes.push(i);
             }
             if (!pp.fn.isDefined(sortFunction)) {
@@ -805,8 +850,8 @@
                     return 0;
                 };
             }
-            for (var i=0; i<array.length; i++) {
-                for (j=0; j<array.length; j++) {
+            for (var i = 0; i <array.length; i ++) {
+                for (var j=0; j < array.length; j ++) {
                     if (j > 0 && sortFunction(array[j-1], array[j]) > 0) {
                         this.swap(j, j-1);
                         indexes.swap(j, j-1);
@@ -821,7 +866,6 @@
          *
          * @method arsort
          * @param function sortFunction 排序函数，可选
-         * @version 0.0.1
          */
         this.arsort = function (sortFunction) {
             var indexes = this.asort(sortFunction);
@@ -834,7 +878,6 @@
          * 反转数组的元素
          *
          * @method reverse
-         * @version 0.0.1
          */
         this.reverse = function () {
             array = array.reverse();
@@ -845,9 +888,8 @@
          * 交换数组的两个索引对应的值
          *
          * @method swap
-         * @param int index1
-         * @param int index2
-         * @version 0.0.1
+         * @param integer index1
+         * @param integer index2
          */
         this.swap = function (index1, index2) {
             var value1 = this.get(index1);
@@ -860,7 +902,6 @@
          * 清除数组所有元素值
          *
          * @method clear
-         * @version 0.0.1
          */
         this.clear = function () {
             array = [];
@@ -870,7 +911,6 @@
          * 将对象转换成字符串格式
          *
          * @method toString
-         * @version 0.0.1
          */
         this.toString = function () {
             return array.toString();
@@ -882,7 +922,6 @@
          * @method unique
          * @param boolean strict 是否类型严格，为可选参数，默认为false
          * @return pp.Array
-         * @version 0.0.1
          */
         this.unique = function (strict) {
             var _array = new pp.Array();
@@ -1058,17 +1097,6 @@
         };
 
         /**
-         * 将当前对象转换成pp.Map
-         *
-         * @method asMap
-         * @return pp.Array
-         * @version 0.4.0
-         */
-        this.asMap = function () {
-            return this;
-        };
-
-        /**
          * 取当前对象与另一pp.Array对象的差集
          *
          * @method diff
@@ -1103,6 +1131,9 @@
             });
             return _array;
         };
+
+	    this._init(arguments);
+	    return this;
     };
 
     Array.prototype.asArray = function () {
@@ -1143,62 +1174,59 @@
 
     pp.Iterator = {
         /**
-         * 遍历当前容器的元素,并对每一元素调用迭代器,该容器必须实现了asMap方法
+         * 遍历当前容器的元素,并对每一元素调用迭代器,该容器必须实现了asEntries方法
          *
          * @method each
          * @param function iterator 接收两个参数(键、值)
-         * @version 0.4.0
          */
         "each": function (iterator) {
             if (typeof(iterator) != "function") {
                 throw new Error(this.toString() + " each: iterator is not a function.");
             }
-            var map;
-            if (pp.fn.isDefined(pp.Map) && (this instanceof pp.Map)) {
-                map = this;
-            }
-            else if (this instanceof  pp.Array) {
-                var arr = this;
-                for (var k = 0; k < arr.length(); k ++) {
-                    var value = arr.get(k);
+			var arr;
+            if (this instanceof pp.Array) {
+				arr = this;
+			}
+			else if (pp.fn.isFunction(this.asEntries)) {
+				arr = this.asEntries();
+	            if (!(arr instanceof pp.Array)) {
+		            pp.log("'asEntries' should return an 'pp.Array' object");
+		            return;
+	            }
+			}
+	        if (!arr) {
+		        pp.log("'asEntries' should be implemented");
+		        return;
+	        }
+	        var index = 0;
+			for (var k = 0; k < arr.length(); k ++) {
+				var value = arr.get(k);
 
-                    try {
-                        iterator.call(this, k, value);
-                    }
-                    catch (e) {
-                        if (e instanceof pp.Iterator.Break) {
-                            break;
-                        }
-                        else if (e instanceof pp.Iterator.Continue) {
-                            continue;
-                        }
-                        else {
-                            throw e;
-                        }
-                    }
-                }
-                return;
-            }
-            else {
-                map = this.asMap();
-            }
-            var inner = map.getContainer();
-            for (var k in inner) {
-                try {
-                    iterator.call(this, k, inner[k]);
-                }
-                catch (e) {
-                    if (e instanceof pp.Iterator.Break) {
-                        break;
-                    }
-                    else if (e instanceof pp.Iterator.Continue) {
-                        continue;
-                    }
-                    else {
-                        throw e;
-                    }
-                }
-            }
+				try {
+					if (value instanceof pp.Entry) {
+						if (value.key === null) {
+							value.key = index;
+
+							index ++;
+						}
+ 						iterator.call(this, value.key, value.value);
+					}
+					else {
+						iterator.call(this, k, value);
+					}
+				}
+				catch (e) {
+					if (e instanceof pp.Iterator.Break) {
+						break;
+					}
+					else if (e instanceof pp.Iterator.Continue) {
+						continue;
+					}
+					else {
+						throw e;
+					}
+				}
+			}
         },
 
         /**
@@ -1207,7 +1235,6 @@
          * @method all
          * @param function iterator 接收两个参数(键、值)
          * @return boolean
-         * @version 0.4.0
          */
         "all": function (iterator) {
             var flg = true;
@@ -1226,7 +1253,6 @@
          * @method any
          * @param function iterator 接收两个参数(键、值)
          * @return boolean
-         * @version 0.4.0
          */
         "any": function (iterator) {
             var flg = false;
@@ -1245,7 +1271,6 @@
          * @method collect
          * @param function iterator 接收两个参数(键、值)
          * @return pp.Array
-         * @version 0.4.0
          */
         "collect": function (iterator) {
             var array = new pp.Array();
@@ -1261,7 +1286,6 @@
          * @method find
          * @param function iterator 接收两个参数(键、值)
          * @return pp.Entry
-         * @version 0.4.0
          */
         "find": function (iterator) {
             var temp= null;
@@ -1280,7 +1304,6 @@
          * @method entries
          * @param function iterator 接收两个参数(键、值)
          * @return pp.Array
-         * @version 0.4.0
          */
         "entries": function () {
             var entries = new pp.Array();
@@ -1296,7 +1319,6 @@
          * @method findAll
          * @param function iterator 接收两个参数(键、值)
          * @return pp.Array
-         * @version 0.4.0
          */
         "findAll": function (iterator) {
             var entries = new pp.Array();
@@ -1314,7 +1336,6 @@
          * @method reject
          * @param function iterator 接收两个参数(键、值)
          * @return pp.Array
-         * @version 0.4.0
          */
         "reject": function (iterator) {
             var entries = new pp.Array();
@@ -1332,7 +1353,6 @@
          * @method include
          * @param mixed value
          * @return boolean
-         * @version 0.4.0
          */
         "include": function (value) {
             var entry = this.find(function (k, v) {
@@ -1340,7 +1360,7 @@
                     return true;
                 }
             });
-            return (entry == null)?false:true;
+            return (entry != null);
         },
 
         /**
@@ -1381,11 +1401,6 @@
         }
     };
 
-    /**
-     * JIterator 对象
-     * @class JIterator
-     */
-
     pp.Iterator.Break = function () {};
     pp.Iterator.Continue = function () {};
 
@@ -1394,23 +1409,25 @@
      *
      * @function pp_continue
      */
-    function pp_continue () {
+    window.pp_continue = function () {
         throw new pp.Iterator.Continue();
-    };
+    }
 
     /**
      * 中止当前循环
      *
      * @function pp_break
      */
-    function pp_break () {
+    window.pp_break = function () {
         throw new pp.Iterator.Break();
-    };
+    }
 
     pp.mixIn = function (dest, source) {
         for (var property in source) {
             try {
-                dest[property] = source[property];
+				if (source.hasOwnProperty(property)) {
+					dest[property] = source[property];
+				}
             } catch (e) {
                 throw new Error("pp.mixIn: get a error when set property: " + property);
             }
@@ -1480,18 +1497,21 @@
     };
 
     /**
-     * 保存键值对的类
-     * @class JEntry
-     */
-    /**
      * 构造器
      *
-     * @constructor JEntry
+     * 支持
+     * - new pp.Entry("Value")
+     * - new pp.Entry("Key", "Value")
+     *
+     * @constructor pp.Entry
      * @param mixed key 键
      * @param mixed value 值
-     * @version 0.4.0
      */
     pp.Entry = function (key, value) {
+	    if (pp.fn.isUndefined(value)) {
+		    value = key;
+		    key = null;
+	    }
         this.key = key;
         this.value = value;
     };

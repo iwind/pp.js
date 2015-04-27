@@ -30,11 +30,11 @@ pp.data.Object = function (data) {
         return this;
     };
 
-    this.bind = function () {
-        _names = arguments;
-        this.change();
-        return this;
-    };
+	this.bind = function () {
+		_names = arguments;
+		this.change();
+		return this;
+	};
 
     this.context = function (context) {
         _context = context;
