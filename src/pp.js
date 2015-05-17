@@ -1,6 +1,7 @@
 (function ($) {
     var events = {};
     var isActivated = false;
+	var documentIsActivated = false;
     var isLoadingFiles = false;
     var pageFunctions = [];
 
@@ -21,7 +22,10 @@
                         }
                     }
 
-                    pp.activate($(document));
+	                if (!documentIsActivated) {
+		                documentIsActivated = true;
+		                pp.activate($(document));
+	                }
                 };
                 if (!isLoadingFiles) {
                     newFn.call();
@@ -46,14 +50,27 @@
         var _duration = 5;//poll专用
         var _beforeFn;
         var _doneFn;
+	    var _successFn;
+	    var _failFn;
         var _errorFn;
         var _self = this;
         var _method = null;
+	    var _sender;
 
-		this.url = function (url) {
+	    this.url = function (url) {
 			_url = url;
 			return this;
 		};
+
+	    this.action = function (action) {
+		    _action = action;
+		    return this;
+	    };
+
+	    this.sender = function (sender) {
+		    _sender = sender;
+		    return this;
+	    };
 
         this.param = function (name, value) {
             _params[name] = value;
@@ -89,88 +106,228 @@
         };
 
         this.before = function (fn) {
+	        if (pp.fn.isUndefined(fn)) {
+		        return _beforeFn;
+	        }
             _beforeFn = fn;
             return this;
         };
 
-        this.done = function (fn) {
-            _doneFn = fn;
-            return this;
-        };
+	    this.done = function (fn) {
+		    if (pp.fn.isUndefined(fn)) {
+			    return _doneFn;
+		    }
+		    _doneFn = fn;
+		    return this;
+	    };
+
+	    this.success = function (fn) {
+		    if (pp.fn.isUndefined(fn)) {
+			    return _successFn;
+		    }
+		    _successFn = fn;
+		    return this;
+	    };
+
+	    this.fail = function (fn) {
+		    if (pp.fn.isUndefined(fn)) {
+			    return _failFn;
+		    }
+			_failFn = fn;
+		    return this;
+	    };
 
         this.error = function (fn) {
+	        if (pp.fn.isUndefined(fn)) {
+		        return _errorFn;
+	        }
             _errorFn = fn;
             return this;
         };
 
         this.post = function () {
-            if (typeof(_beforeFn) == "function") {
-                var before = _beforeFn.call(pp, this);
-                if (typeof(before) == "boolean" && !before) {
-                    return this;
-                }
-            }
-
-			var url = _url;
-			if (_url == null) {
-				url = pp.url(_action);
-			}
-
-            $.ajax({
-                "timeout": Math.ceil(_timeout * 1000),
-                "type": "POST",
-                "data": _params,
-                "url": url,
-                "dataType": "json",
-                "success": function (response) {
-                    if (typeof(_doneFn) == "function") {
-                        _doneFn.call(pp, _self, response);
-                    }
-                },
-                "error": function () {
-                    if (typeof(_errorFn) == "function") {
-                        _errorFn.call(pp, _self);
-                    }
-                }
-            });
-
-			return this;
+			setTimeout(this._delayPost, 0);
+	        return this;
         };
+
+	    this._delayPost = function () {
+		    if (typeof(_beforeFn) == "function") {
+			    var before = _beforeFn.call(pp, this);
+			    if (typeof(before) == "boolean" && !before) {
+				    return this;
+			    }
+		    }
+
+		    var url = _url;
+		    if (_url == null) {
+			    url = pp.url(_action);
+		    }
+
+		    $.ajax({
+			    "timeout": Math.ceil(_timeout * 1000),
+			    "type": "POST",
+			    "data": _params,
+			    "url": url,
+			    "dataType": "json",
+			    "contentType": (_params instanceof FormData) ? false : "application/x-www-form-urlencoded; charset=UTF-8",
+			    "processData": !(_params instanceof FormData),
+			    "success": function (response) {
+				    if (typeof(_doneFn) == "function") {
+					    pp.sender = _sender;
+					    _doneFn.call(pp, _self, response);
+				    }
+
+				    //success|fail
+				    if (typeof(response) == "object" && typeof(response.code) != "undefined") {
+					    if (_sender) {
+						    _sender.find("*[class*='pp-message-']").hide();
+						    _sender.find(".pp-fail").removeClass("pp-fail");
+						    _sender.find(".pp-success").removeClass("pp-success");
+						    _sender.find(".pp-error").hide();
+						    _sender.find(".pp-ok").hide();
+					    }
+
+					    if (response.code == 200) {//@TODO 让200变成可自定义
+						    if (_sender) {
+							    _sender.find(".pp-ok").show();
+						    }
+
+						    if (pp.fn.isFunction(_successFn)) {
+							    pp.sender = _sender;
+							    _successFn.call(pp, response);
+						    }
+						    else {
+							    if (typeof(response.message) == "string") {
+								    alert(response.message);
+							    }
+							    if (pp.fn.isDefined(response.next)) {
+								    if (response.next == "${self}") {
+									    window.location.reload();
+								    }
+								    else {
+									    pp.go(response.next);
+								    }
+							    }
+						    }
+					    }
+					    else {
+						    if (_sender) {
+							    _sender.find(".pp-error").show();
+						    }
+
+						    var errors = pp.fn.isDefined(response.errors) ? response.errors : null;
+						    if (pp.fn.isArray(errors) && errors.length > 0 && _sender) {
+							    for (var i = 0; i < errors.length; i++) {
+								    var error = errors[i];
+								    var field = error[0];
+								    var message = error[1][0][1];
+								    var messageView = _sender.find(".pp-message-" + field);
+								    var messageBodyView = messageView.find(".pp-body");
+								    if (field && message) {
+									    messageView.show();
+									    if (messageBodyView.length > 0) {
+										    messageBodyView.html(message);
+									    }
+									    else {
+										    messageView.html(message);
+									    }
+								    }
+								    else {
+									    messageView.show();
+									    if (messageBodyView.length > 0) {
+										    messageBodyView.empty();
+									    }
+									    else {
+										    messageView.empty();
+									    }
+								    }
+
+								    //总体消息
+								    if (i == 0 && message) {
+									    _sender.find(".pp-error .pp-error-body").html(message).show();
+								    }
+
+								    //样式
+								    if (field) {
+									    _sender.named(field).addClass("pp-fail");
+
+									    if (i == 0) {
+										    _sender.named(field).focus();
+									    }
+								    }
+							    }
+						    }
+						    else {
+							    if (!pp.fn.isFunction(_failFn) && response.message != null) {
+								    alert(response.message);
+							    }
+						    }
+
+						    if (pp.fn.isFunction(_failFn)) {
+							    var error = null;
+							    if (pp.fn.isArray(errors) && errors.length > 0) {
+								    error = {
+									    "field": errors[0][0],
+									    "rule": errors[0][1][0][0],
+									    "message": errors[0][1][0][1]
+								    };
+							    }
+
+							    pp.sender = _sender;
+							    _failFn.call(pp, response, error);
+						    }
+					    }
+				    }
+			    },
+			    "error": function () {
+				    if (typeof(_errorFn) == "function") {
+					    pp.sender = _sender;
+					    _errorFn.call(pp, _self);
+				    }
+			    }
+		    });
+
+		    return this;
+	    };
 
         this.get = function () {
-            if (typeof(_beforeFn) == "function") {
-                var before = _beforeFn.call(pp, this);
-                if (typeof(before) == "boolean" && !before) {
-                    return this;
-                }
-            }
-			var url = _url;
-			if (_url == null) {
-				url = pp.url(_action);
-			}
-	        $.ajax({
-                "timeout": Math.ceil(_timeout * 1000),
-                "type": "GET",
-                "data": _params,
-                "url": url,
-                "dataType": "json",
-                "success": function (response) {
-	                if (typeof(_doneFn) == "function") {
-                        _doneFn.call(pp, _self, response);
-                    }
-                },
-                "error": function (ajax, message) {
-                    if (typeof(_errorFn) == "function") {
-                        _errorFn.call(pp, _self, message);
-                    }
-	                else {
-	                    pp.log("'get' error:" + message);
-                    }
-                }
-            });
-
-			return this;
+			setTimeout(this._delayGet, 0);
         };
+
+	    this._delayGet = function () {
+		    if (typeof(_beforeFn) == "function") {
+			    var before = _beforeFn.call(pp, this);
+			    if (typeof(before) == "boolean" && !before) {
+				    return this;
+			    }
+		    }
+		    var url = _url;
+		    if (_url == null) {
+			    url = pp.url(_action);
+		    }
+		    $.ajax({
+			    "timeout": Math.ceil(_timeout * 1000),
+			    "type": "GET",
+			    "data": _params,
+			    "url": url,
+			    "dataType": "json",
+			    "success": function (response) {
+				    if (typeof(_doneFn) == "function") {
+					    _doneFn.call(pp, _self, response);
+				    }
+			    },
+			    "error": function (ajax, message) {
+				    if (typeof(_errorFn) == "function") {
+					    _errorFn.call(pp, _self, message);
+				    }
+				    else {
+					    pp.log("'get' error:" + message);
+				    }
+			    }
+		    });
+
+		    return this;
+	    };
 
         this.pull = function () {
             if (typeof(_beforeFn) == "function") {
@@ -230,12 +387,12 @@
             this.param("_", (new Date()).getTime());
 
             $.ajax({
-                "timeout":Math.ceil(_timeout * 1000),
-                "type":_method,
-                "data":_params,
-                "url":pp.url(_action),
-                "dataType":"json",
-                "success":function (response) {
+                "timeout": Math.ceil(_timeout * 1000),
+                "type": _method,
+                "data": _params,
+                "url": pp.url(_action),
+                "dataType": "json",
+                "success": function (response) {
                     if (_target) {
                         $(_target).html(response);
                     }
@@ -247,7 +404,7 @@
                         _self.poll();
                     }, Math.ceil(_duration * 1000));
                 },
-                "error":function () {
+                "error": function () {
                     if (typeof(_errorFn) == "function") {
                         _errorFn.call(pp, _self);
                     }
@@ -269,67 +426,71 @@
     pp.action.POST = "post";
     pp.action.GET = "get";
 
-    /* 事件 */
+    /**
+     * 事件
+     *
+     * - pp.on(node, fn)
+     * - pp.on("action", fn)
+     * - pp.on(["action1", "action2", ...], fn)
+     */
     pp.on = function (action, fn) {
-        if (this == pp) {
-            if (!pp.fn.isArray(action)) {
-                action = [ action ];
-            }
-            var obj = new pp.on(action, fn);
-            if (pp.fn.isFunction(fn)) {
-                obj.done(fn);
-            }
-
-            action.asArray().each(function (k, _action) {
-                events[_action] = obj;
-            });
-            return obj;
+	    if (action instanceof jQuery) {
+			action = action.attr("pp-action");
+	    }
+        if (!pp.fn.isArray(action)) {
+            action = [ action ];
+        }
+        var obj = new pp.ActionObject();
+        if (pp.fn.isFunction(fn)) {
+            obj.done(fn);
         }
 
-        var _beforeFn;
-        var _doneFn;
-        var _errorFn;
-
-        this.before = function (fn) {
-            if (typeof(fn) == "undefined") {
-                return _beforeFn;
-            }
-            _beforeFn = fn;
-            return this;
-        };
-
-        this.done = function (fn) {
-            if (typeof(fn) == "undefined") {
-                return _doneFn;
-            }
-            _doneFn = fn;
-            return this;
-        };
-
-        this.error = function (fn) {
-            if (typeof(fn) == "undefined") {
-                return _errorFn;
-            }
-            _errorFn = fn;
-            return this;
-        };
+        action.asArray().each(function (k, _action) {
+            events[_action] = obj;
+        });
+        return obj;
     };
 
     pp.url = function (action, params) {
-        var url = action.replace(/\./g, "/");
+	    this._trimPath = function (path) {
+		    path = path.replace(/\/+/g, "/");
+			if (path.substr(-1, 1) == "/") {
+				path = path.substr(0, path.length - 1);
+			}
+		    return path;
+	    };
 
-        if (url.length > 0 && url.substring(0, 1) != "/") {
-            url = "/" + url;
-        }
-        else {
-            url = "/";
-        }
+	    var url;
+	    if (action.match(/\//)) {//支持URL
+			url = action;
+	    }
+	    else {
+		    if (action.substr(0, 2) == "..") {
+				url = this._trimPath(window.location.pathname).replace(/\/\w+\/\w+$/, "") + "/" + action.substr(2).replace(/\./g, "/");
+		    }
+		    else if (action.substr(0, 1) == ".") {
+			    url = this._trimPath(window.location.pathname).replace(/\/\w+$/, "") + "/" + action.substr(1).replace(/\./g, "/");
+		    }
+		    else {
+			    url = action.replace(/\./g, "/");
+
+			    if (url.length > 0 && url.substring(0, 1) != "/") {
+				    url = "/" + url;
+			    }
+			    else {
+				    url = "/";
+			    }
+		    }
+	    }
         if (typeof(params) == "object") {
             var query = $.param(params);
             if (query.length > 0) {
                 url += "?" + query;
             }
         }
+	    if (!url.match(/^(http|https|ftp):/i)) {
+		    url = pp.config.base + ((url.substr(0, 1) == "/") ? "" : "/") + url;
+	    }
         return url;
     };
     pp.go = function (action, params) {
@@ -370,6 +531,12 @@
         return (value instanceof Array);
     };
 
+
+
+	$.fn.named = function (name) {
+		return this.find("*[name='" + name + "']");
+	};
+
     pp.log = function () {
         if (!pp.config.log) {
             return;
@@ -389,59 +556,35 @@
      * @param box 视图容器
      */
     pp.activate = function (box) {
-        box.find("*[pp-action]").each(function () {
+	    box.find("*[pp-action]").each(function () {
             var element = $(this);
             var tagName = element[0].tagName.toUpperCase();
 
             //处理事件
             if (tagName == "FORM") {
                 element.submit(function () {
-                    var action = element.attr("pp-action");
-                    var eventObj = null;
-                    if (typeof(events[action]) != "undefined") {
-                        eventObj = events[action];
-                        var beforeFn = eventObj.before();
-                        if (pp.fn.isFunction(beforeFn)) {
-                            var ret = beforeFn.call(pp, element);
-                            if (pp.fn.isBoolean(ret) && !ret) {
-                                return false;
-                            }
-                        }
-                    }
-
+	                var action = element.attr("pp-action");
                     var request = new FormData(element[0]);
 
-                    $.ajax({
-                        "url":pp.url(action),
-                        "data":request,//element.serialize(),
-                        "type":"POST",
-                        "dataType":"json",
-                        "contentType":false,
-                        "processData":false,
-                        "success":function (response) {
-                            if (eventObj != null) {
-                                var doneFn = eventObj.done();
-                                if (pp.fn.isFunction(doneFn)) {
-                                    doneFn.call(pp, element, response);
-                                }
-                            }
-                        },
-                        "error":function () {
-                            if (eventObj != null) {
-                                var errorFn = eventObj.error();
-                                if (pp.fn.isFunction(errorFn)) {
-                                    errorFn.call(pp, element);
-                                }
-                            }
-                        }
-                    });
+	                if (pp.fn.isUndefined(events[action])) {
+		                events[action] = new pp.ActionObject();
+	                }
 
+	                var eventObj = events[action];
+
+	                if (typeof(action) == "string") {
+		                var match = action.match(/^url:(.+)$/);
+		                if (match) {
+			                action = match[1];
+		                }
+	                }
+
+	                eventObj.sender(element)
+		                .params(request)
+		                .action(action)
+		                .post();
                     return false;
                 });
-
-                element.named = function (name) {
-                    return this.find("*[name='" + name + "']");
-                };
             }
             else {
                 var action = element.attr("pp-action");
@@ -461,6 +604,24 @@
                         if (pp.fn.isFunction(doneFn)) {
                             doneFn.call(pp, element);
                         }
+                    }
+	                else {
+	                    var eventObj = new pp.ActionObject();
+	                    var attrs = element[0].attributes;
+	                    var params = {};
+	                    for (var i = 0; i < attrs.length; i ++) {
+		                    var attr = attrs[i];
+		                    var result = attr.name.match(/^data-(.+)/);
+		                    if (!result) {
+			                    continue;
+		                    }
+		                    var param = result[1].replace(/-/g, "_");
+							params[param] = attr.value;
+	                    }
+	                    eventObj.sender(element)
+		                    .params(params)
+		                    .action(action)
+		                    .post();
                     }
                     return false;
                 });
@@ -1411,7 +1572,7 @@
      */
     window.pp_continue = function () {
         throw new pp.Iterator.Continue();
-    }
+    };
 
     /**
      * 中止当前循环
@@ -1420,7 +1581,7 @@
      */
     window.pp_break = function () {
         throw new pp.Iterator.Break();
-    }
+    };
 
     pp.mixIn = function (dest, source) {
         for (var property in source) {
@@ -1466,12 +1627,12 @@
         isLoadingFiles = true;
         files.each(function (index, file) {
             $.ajax({
-                "url":file,
-                "type":"get",
-                "dataType":"script",
-                "async":true,
-                "cache":true,
-                "success":function () {
+                "url": file,
+                "type": "get",
+                "dataType": "script",
+                "async": true,
+                "cache": true,
+                "success": function () {
                     requiredFiles.push(file);
                     files.removeValue(file);
 
@@ -1518,13 +1679,18 @@
 
     /* 配置 */
     pp.config = {
-        "js":"/js",
-        "log":true,
-        "versions":{}
+        "js": "/js",//JS访问目录
+	    "base": "",//URL基本路径
+        "log": true,
+        "versions": {}
     };
 
     if (!isActivated) {
-        pp.activate($(document));
+	    $(function () {
+		    if (!isActivated) {
+			    pp.activate($(document));
+		    }
+	    });
     }
 
     window.pp = pp;
