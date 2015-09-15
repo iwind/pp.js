@@ -5,6 +5,11 @@
     var isLoadingFiles = false;
     var pageFunctions = [];
 
+	window.PP_CONTROLLER = "{echo PP_CONTROLLER}";
+	window.PP_MODULE = "{echo PP_MODULE}";
+	window.PP_URL_DISPATCHER = "{echo PP_URL_DISPATCHER}";
+	window.PP_URL_BASE = "{echo PP_URL_BASE}";
+
     window.pp = function (fn) {
         if (pp.fn.isFunction(fn)) {
             isActivated = true;
@@ -172,112 +177,7 @@
 			    "contentType": (_params instanceof FormData) ? false : "application/x-www-form-urlencoded; charset=UTF-8",
 			    "processData": !(_params instanceof FormData),
 			    "success": function (response) {
-				    if (typeof(_doneFn) == "function") {
-					    pp.sender = _sender;
-					    _doneFn.call(pp, _self, response);
-				    }
-
-				    //success|fail
-				    if (typeof(response) == "object" && typeof(response.code) != "undefined") {
-					    if (_sender) {
-						    _sender.find("*[class*='pp-message-']").hide();
-						    _sender.find(".pp-fail").removeClass("pp-fail");
-						    _sender.find(".pp-success").removeClass("pp-success");
-						    _sender.find(".pp-error").hide();
-						    _sender.find(".pp-ok").hide();
-					    }
-
-					    if (response.code == 200) {//@TODO 让200变成可自定义
-						    if (_sender) {
-							    _sender.find(".pp-ok").show();
-						    }
-
-						    if (pp.fn.isFunction(_successFn)) {
-							    pp.sender = _sender;
-							    _successFn.call(pp, response);
-						    }
-						    else {
-							    if (typeof(response.message) == "string") {
-								    alert(response.message);
-							    }
-							    if (pp.fn.isDefined(response.next)) {
-								    if (response.next == "${self}") {
-									    window.location.reload();
-								    }
-								    else {
-									    pp.go(response.next);
-								    }
-							    }
-						    }
-					    }
-					    else {
-						    if (_sender) {
-							    _sender.find(".pp-error").show();
-						    }
-
-						    var errors = pp.fn.isDefined(response.errors) ? response.errors : null;
-						    if (pp.fn.isArray(errors) && errors.length > 0 && _sender) {
-							    for (var i = 0; i < errors.length; i++) {
-								    var error = errors[i];
-								    var field = error[0];
-								    var message = error[1][0][1];
-								    var messageView = _sender.find(".pp-message-" + field);
-								    var messageBodyView = messageView.find(".pp-body");
-								    if (field && message) {
-									    messageView.show();
-									    if (messageBodyView.length > 0) {
-										    messageBodyView.html(message);
-									    }
-									    else {
-										    messageView.html(message);
-									    }
-								    }
-								    else {
-									    messageView.show();
-									    if (messageBodyView.length > 0) {
-										    messageBodyView.empty();
-									    }
-									    else {
-										    messageView.empty();
-									    }
-								    }
-
-								    //总体消息
-								    if (i == 0 && message) {
-									    _sender.find(".pp-error .pp-error-body").html(message).show();
-								    }
-
-								    //样式
-								    if (field) {
-									    _sender.named(field).addClass("pp-fail");
-
-									    if (i == 0) {
-										    _sender.named(field).focus();
-									    }
-								    }
-							    }
-						    }
-						    else {
-							    if (!pp.fn.isFunction(_failFn) && response.message != null) {
-								    alert(response.message);
-							    }
-						    }
-
-						    if (pp.fn.isFunction(_failFn)) {
-							    var error = null;
-							    if (pp.fn.isArray(errors) && errors.length > 0) {
-								    error = {
-									    "field": errors[0][0],
-									    "rule": errors[0][1][0][0],
-									    "message": errors[0][1][0][1]
-								    };
-							    }
-
-							    pp.sender = _sender;
-							    _failFn.call(pp, response, error);
-						    }
-					    }
-				    }
+				    _self._parseResponse(response);
 			    },
 			    "error": function () {
 				    if (typeof(_errorFn) == "function") {
@@ -312,9 +212,7 @@
 			    "url": url,
 			    "dataType": "json",
 			    "success": function (response) {
-				    if (typeof(_doneFn) == "function") {
-					    _doneFn.call(pp, _self, response);
-				    }
+				    _self._parseResponse(response);
 			    },
 			    "error": function (ajax, message) {
 				    if (typeof(_errorFn) == "function") {
@@ -327,6 +225,129 @@
 		    });
 
 		    return this;
+	    };
+
+	    this._parseResponse = function (response) {
+		    if (typeof(_doneFn) == "function") {
+			    pp.sender = _sender;
+			    _doneFn.call(pp, _self, response);
+		    }
+
+		    //success|fail
+		    if (typeof(response) == "object" && typeof(response.code) != "undefined") {
+			    if (_sender) {
+				    _sender.find("*[class*='pp-message-']").hide();
+				    _sender.find(".pp-fail").removeClass("pp-fail");
+				    _sender.find(".pp-success").removeClass("pp-success");
+				    _sender.find(".pp-error").hide();
+				    _sender.find(".pp-ok").hide();
+			    }
+
+			    if (response.code == 200) {//@TODO 让200变成可自定义
+				    if (_sender) {
+					    _sender.find(".pp-ok").show();
+				    }
+
+				    if (pp.fn.isFunction(_successFn)) {
+					    pp.sender = _sender;
+					    _successFn.call(pp, response);
+				    }
+				    else {
+					    if (typeof(response.message) == "string") {
+						    alert(response.message);
+					    }
+					    if (pp.fn.isDefined(response.next)) {
+						    if (response.next == "${self}") {
+							    window.location.reload();
+						    }
+						    else {
+							    pp.go(response.next, pp.fn.isDefined(response.next_params) ? response.next_params : {});
+						    }
+					    }
+				    }
+			    }
+			    else {
+				    if (_sender) {
+					    var errorView = _sender.find(".pp-error");
+					    errorView.show();
+				    }
+
+				    var errors = pp.fn.isDefined(response.errors) ? response.errors : null;
+				    if (pp.fn.isArray(errors) && errors.length > 0 && _sender) {
+					    var isProcessed = pp.fn.isFunction(_failFn);
+					    for (var i = 0; i < errors.length; i++) {
+						    var error = errors[i];
+						    var field = error[0];
+						    var message = error[1][0][1];
+						    var messageView = _sender.find(".pp-message-" + field);
+						    var messageBodyView = messageView.find(".pp-body");
+						    if (field && message) {
+							    messageView.show();
+							    if (messageBodyView.length > 0) {
+								    isProcessed = true;
+								    messageBodyView.html(message);
+							    }
+							    else {
+								    if (messageView.length > 0) {
+									    isProcessed = true;
+									    messageView.html(message);
+								    }
+							    }
+						    }
+						    else {
+							    messageView.show();
+							    if (messageBodyView.length > 0) {
+								    messageBodyView.empty();
+							    }
+							    else {
+								    messageView.empty();
+							    }
+						    }
+
+						    //总体消息
+						    if (i == 0 && message) {
+							    var errorView = _sender.find(".pp-error .pp-error-body");
+							    if (errorView.length > 0) {
+								    isProcessed = true;
+								    errorView.html(message).show();
+							    }
+						    }
+
+						    //样式
+						    if (field) {
+							    _sender.named(field).addClass("pp-fail");
+
+							    if (i == 0) {
+								    _sender.named(field).focus();
+							    }
+						    }
+					    }
+
+					    if (!isProcessed) {
+						    alert(errors[0][1][0][1]);
+					    }
+				    }
+				    else {
+					    if (!pp.fn.isFunction(_failFn) && response.message != null) {
+						    alert(response.message);
+					    }
+				    }
+
+				    if (pp.fn.isFunction(_failFn)) {
+					    var error = null;
+					    if (pp.fn.isArray(errors) && errors.length > 0) {
+						    error = {
+							    "field": errors[0][0],
+							    "rule": errors[0][1][0][0],
+							    "message": errors[0][1][0][1]
+						    };
+					    }
+
+					    pp.sender = _sender;
+					    _failFn.call(pp, response, error);
+				    }
+			    }
+		    }
 	    };
 
         this.pull = function () {
@@ -451,45 +472,62 @@
         return obj;
     };
 
-    pp.url = function (action, params) {
-	    this._trimPath = function (path) {
-		    path = path.replace(/\/+/g, "/");
-			if (path.substr(-1, 1) == "/") {
-				path = path.substr(0, path.length - 1);
-			}
-		    return path;
-	    };
-
+    pp.url = function (action, params, hashParams) {
 	    var url;
 	    if (action.match(/\//)) {//支持URL
 			url = action;
+
+		    if (typeof(params) == "object") {
+			    var query = $.param(params);
+			    if (query.length > 0) {
+				    url += "?" + query;
+			    }
+		    }
+		    if (!url.match(/^(http|https|ftp):/i)) {
+			    url = PP_URL_BASE + ((url.substr(0, 1) == "/") ? "" : "/") + url;
+		    }
 	    }
 	    else {
-		    if (action.substr(0, 2) == "..") {
-				url = this._trimPath(window.location.pathname).replace(/\/\w+\/\w+$/, "") + "/" + action.substr(2).replace(/\./g, "/");
-		    }
-		    else if (action.substr(0, 1) == ".") {
-			    url = this._trimPath(window.location.pathname).replace(/\/\w+$/, "") + "/" + action.substr(1).replace(/\./g, "/");
-		    }
-		    else {
-			    url = action.replace(/\./g, "/");
-
-			    if (url.length > 0 && url.substring(0, 1) != "/") {
-				    url = "/" + url;
+		    if (action.substr(0, 2) === "..") {
+			    var controller = PP_CONTROLLER;
+			    var pos = controller.lastIndexOf(".");
+			    if (pos === -1) {
+				    action = action.substr(2);
 			    }
 			    else {
-				    url = "/";
+				    action = controller.substr(0, pos) + action.substr(1);
+			    }
+			    if (PP_MODULE != "_") {
+				    action = "@" + PP_MODULE + "." + action;
 			    }
 		    }
-	    }
-        if (typeof(params) == "object") {
-            var query = $.param(params);
-            if (query.length > 0) {
-                url += "?" + query;
-            }
-        }
-	    if (!url.match(/^(http|https|ftp):/i)) {
-		    url = pp.config.base + ((url.substr(0, 1) == "/") ? "" : "/") + url;
+		    else if (action.substr(0, 1) == ".") {
+			    action = PP_CONTROLLER + action;
+			    if (PP_MODULE != "_") {
+				    action = "@" + PP_MODULE + "." + action;
+			    }
+		    }
+		    else if (PP_MODULE != "_") {
+			    if (action == "@") {
+				    action = "@" + PP_MODULE;
+			    }
+			    else {
+				    action = action.replace("@.", "@" + PP_MODULE + ".");
+			    }
+		    }
+		    url = PP_URL_BASE + PP_URL_DISPATCHER + "/"  + action.replace(/\./g, "/");
+		    if (typeof(params) == "object") {
+			    var params = jQuery.param(params);
+			    if (params.length > 0) {
+				    url += "?" + params;
+			    }
+		    }
+		    if (typeof(hashParams) == "string") {
+			    url += "#" + hashParams;
+		    }
+		    else if (typeof(hashParams) == "object") {
+			    url += "#" + jQuery.param(hashParams);
+		    }
 	    }
         return url;
     };
@@ -563,6 +601,13 @@
             //处理事件
             if (tagName == "FORM") {
                 element.submit(function () {
+	                var confirmMessage = element.attr("pp-confirm");
+	                if (confirmMessage) {
+		                if (!window.confirm(confirmMessage)) {
+			                return false;
+		                }
+	                }
+
 	                var action = element.attr("pp-action");
                     var request = new FormData(element[0]);
 
@@ -598,6 +643,12 @@
 
                 element.click(function () {
                     var action = element.attr("pp-action");
+	                var confirmMessage = element.attr("pp-confirm");
+	                if (confirmMessage) {
+		                if (!window.confirm(confirmMessage)) {
+			                return false;
+		                }
+	                }
                     if (typeof(events[action]) != "undefined") {
                         var obj = events[action];
                         var doneFn = obj.done();
@@ -1680,7 +1731,6 @@
     /* 配置 */
     pp.config = {
         "js": "/js",//JS访问目录
-	    "base": "",//URL基本路径
         "log": true,
         "versions": {}
     };
